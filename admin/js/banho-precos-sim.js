@@ -93,4 +93,4 @@ export function ligarSimulador(raiz, lerCfg) {
   }
 
   return { atualizar };
-                                        }
+                         }
