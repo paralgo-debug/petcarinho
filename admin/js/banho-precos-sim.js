@@ -21,12 +21,13 @@ export function htmlSimulador() {
     '</div></details>';
 }
 
-function faltandoTexto(est, cfg) {
+function faltandoTexto(est, cfg, porte) {
   return (est.faltando || []).map((k) => {
-    if (k.startsWith('porte:')) return 'preço base do porte ' + rotuloDe(PORTES, k.slice(6)).toLowerCase();
     if (k.startsWith('servico:')) {
       const s = cfg.servicos.find((x) => x.id === k.slice(8));
-      return 'valor adicional de "' + (s && s.nome ? s.nome : 'serviço') + '"';
+      const nome = s && s.nome ? s.nome : 'serviço';
+      const p = rotuloDe(PORTES, porte).toLowerCase();
+      return 'preço de "' + nome + '"' + (p ? ' para o porte ' + p : '');
     }
     return '';
   }).filter(Boolean);
@@ -65,9 +66,10 @@ export function ligarSimulador(raiz, lerCfg) {
     const pesoInvalido = Number.isNaN(peso);
     if (pesoInvalido) peso = null;
 
+    const porte = $('bp-sim-porte').value;
     const ids = Array.from(raiz.querySelectorAll('input[name="bp-sim-srv"]:checked')).map((i) => i.value);
     const est = calcular(cfg, {
-      porte: $('bp-sim-porte').value,
+      porte,
       pelagem: $('bp-sim-pelagem').value,
       peso,
       dificil: $('bp-sim-dificil').checked,
@@ -80,7 +82,7 @@ export function ligarSimulador(raiz, lerCfg) {
         est.itens.map((i) => '<li><span>' + esc(i.rotulo) + '</span><span>' + esc(brl(i.valor)) + '</span></li>').join('') + '</ul>';
     } else {
       h += '<p>' + esc(explicarSemEstimativa(est)) + '</p>';
-      const f = est.motivo === 'preco' ? faltandoTexto(est, cfg) : [];
+      const f = est.motivo === 'preco' ? faltandoTexto(est, cfg, porte) : [];
       if (f.length > 0) h += '<p><strong>Falta definir:</strong> ' + esc(f.join('; ')) + '.</p>';
     }
     h += '<p class="ajuda">' + esc(AVISO_ESTIMATIVA) + '</p>';
@@ -91,4 +93,4 @@ export function ligarSimulador(raiz, lerCfg) {
   }
 
   return { atualizar };
-  }
+                                        }
