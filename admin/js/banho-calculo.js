@@ -1,6 +1,7 @@
 // PET NATUREZA - Banho & Tosa - cálculo da estimativa e constantes
 // Usado pelo site público e pelo painel. Não depende de nenhum outro arquivo.
 // A função calcular() segue exatamente a função SQL bt_calcular().
+// Cada serviço tem um preço para cada porte (campo "precos").
 
 export const PORTES = [
   { valor: 'mini', rotulo: 'Mini' },
@@ -38,15 +39,19 @@ export const AVISO_ESTIMATIVA =
 export const TEXTO_PRECO_PELA_EQUIPE =
   'O valor deste atendimento será informado pela equipe do Pet Natureza pelo WhatsApp.';
 
+// Preços vazios (nulo = ainda não definido) para os 5 portes
+export function precosVazios() {
+  return { mini: null, pequeno: null, medio: null, grande: null, gigante: null };
+}
+
 export const CONFIG_PADRAO = {
   servicos: [
-    { id: 'banho_simples', nome: 'Banho simples', adicional: null, ativo: true },
-    { id: 'banho_tosa_higienica', nome: 'Banho e tosa higiênica', adicional: null, ativo: true },
-    { id: 'tosa_completa', nome: 'Tosa completa', adicional: null, ativo: true },
-    { id: 'hidratacao', nome: 'Hidratação', adicional: null, ativo: true },
-    { id: 'escovacao', nome: 'Escovação', adicional: null, ativo: true }
+    { id: 'banho_simples', nome: 'Banho simples', precos: precosVazios(), ativo: true },
+    { id: 'banho_tosa_higienica', nome: 'Banho e tosa higiênica', precos: precosVazios(), ativo: true },
+    { id: 'tosa_completa', nome: 'Tosa completa', precos: precosVazios(), ativo: true },
+    { id: 'hidratacao', nome: 'Hidratação', precos: precosVazios(), ativo: true },
+    { id: 'escovacao', nome: 'Escovação', precos: precosVazios(), ativo: true }
   ],
-  preco_base_porte: { mini: null, pequeno: null, medio: null, grande: null, gigante: null },
   pelagem_adicional: { curto: null, medio: null, longo: null, cacheado: null, outro: null },
   peso_faixas: [],
   manejo_dificil: null,
@@ -110,6 +115,7 @@ function mapaDePrecos(origem, chaves) {
 
 export function normalizarConfig(bruta) {
   const b = bruta && typeof bruta === 'object' && !Array.isArray(bruta) ? bruta : {};
+  const chavesPorte = PORTES.map((p) => p.valor);
 
   let servicos;
   if (Array.isArray(b.servicos)) {
@@ -118,7 +124,7 @@ export function normalizarConfig(bruta) {
       .map((s) => ({
         id: s.id,
         nome: typeof s.nome === 'string' ? s.nome : s.id,
-        adicional: num(s.adicional),
+        precos: mapaDePrecos(s.precos, chavesPorte),
         ativo: s.ativo !== false
       }));
   } else {
@@ -136,7 +142,6 @@ export function normalizarConfig(bruta) {
 
   return {
     servicos,
-    preco_base_porte: mapaDePrecos(b.preco_base_porte, PORTES.map((p) => p.valor)),
     pelagem_adicional: mapaDePrecos(b.pelagem_adicional, PELAGENS.map((p) => p.valor)),
     peso_faixas: faixas,
     manejo_dificil: num(b.manejo_dificil),
@@ -150,8 +155,8 @@ export function normalizarConfig(bruta) {
 // entrada: { porte, pelagem, peso (número ou null), dificil (boolean), servicos: [ids] }
 // retorno: { ok:true, total, itens:[{rotulo, valor}] }
 //       ou { ok:false, motivo:'dados'|'preco', faltando:[...] }
+// Itens, na ordem: serviços, pelagem, peso, manejo.
 // ---------------------------------------------------------------------
-const ROTULO_PORTE = { mini: 'mini', pequeno: 'pequeno', medio: 'médio', grande: 'grande', gigante: 'gigante' };
 const ROTULO_PELAGEM = { curto: 'curta', medio: 'média', longo: 'longa', cacheado: 'cacheada', outro: 'outra' };
 
 export function calcular(cfg, entrada) {
@@ -174,25 +179,16 @@ export function calcular(cfg, entrada) {
   const itens = [];
   let total = 0;
 
-  // Preço base do porte
-  const base = num(cfg.preco_base_porte ? cfg.preco_base_porte[porte] : null);
-  if (base === null) {
-    faltaPreco.push('porte:' + porte);
-  } else {
-    itens.push({ rotulo: 'Porte ' + (ROTULO_PORTE[porte] || porte), valor: base });
-    total += base;
-  }
-
-  // Serviços
+  // Serviços: o preço vem do porte do pet
   const lista = Array.isArray(cfg.servicos) ? cfg.servicos : [];
   for (const id of ids) {
     const srv = lista.find((s) => s && s.id === id);
-    const adic = srv ? num(srv.adicional) : null;
-    if (adic === null) {
+    const preco = srv && srv.precos ? num(srv.precos[porte]) : null;
+    if (preco === null) {
       faltaPreco.push('servico:' + id);
     } else {
-      itens.push({ rotulo: typeof srv.nome === 'string' ? srv.nome : id, valor: adic });
-      total += adic;
+      itens.push({ rotulo: typeof srv.nome === 'string' ? srv.nome : id, valor: preco });
+      total += preco;
     }
   }
 
@@ -251,4 +247,4 @@ export function explicarSemEstimativa(est) {
     ? partes[0]
     : partes.slice(0, -1).join(', ') + ' e ' + partes[partes.length - 1];
   return 'Para calcular o valor aproximado, informe ' + texto + '.';
-    }
+}
