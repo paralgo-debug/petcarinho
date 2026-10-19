@@ -1,6 +1,7 @@
 // PET NATUREZA - Banho & Tosa (painel) - serviços e preços: modelo, formulário e validação
 // O "modelo" guarda tudo como TEXTO (o que está digitado). A conversão para números
 // acontece só em converter().
+// Cada serviço tem um preço para cada porte (campo "precos").
 import { esc } from './util.js';
 import { PORTES, PELAGENS, normalizarConfig, lerNumero, formatarNumero } from './banho-calculo.js';
 
@@ -17,8 +18,12 @@ export function modeloDe(cfgBruta) {
   const c = normalizarConfig(cfgBruta);
   const t = formatarNumero;
   return {
-    servicos: c.servicos.slice(0, MAX_SERVICOS).map((s) => ({ id: s.id, nome: s.nome, adicional: t(s.adicional), ativo: s.ativo })),
-    base: Object.fromEntries(PORTES.map((p) => [p.valor, t(c.preco_base_porte[p.valor])])),
+    servicos: c.servicos.slice(0, MAX_SERVICOS).map((s) => ({
+      id: s.id,
+      nome: s.nome,
+      precos: Object.fromEntries(PORTES.map((p) => [p.valor, t(s.precos[p.valor])])),
+      ativo: s.ativo
+    })),
     pelagem: Object.fromEntries(PELAGENS.map((p) => [p.valor, t(c.pelagem_adicional[p.valor])])),
     faixas: c.peso_faixas.slice(0, MAX_FAIXAS).map((f) => ({ limite: t(f.acima_de_kg), adicional: t(f.adicional) })),
     manejo: t(c.manejo_dificil),
@@ -35,10 +40,9 @@ export function sanearModelo(m) {
     servicos: m.servicos.slice(0, MAX_SERVICOS).map((s) => ({
       id: idOk(s && s.id) ? s.id : '',
       nome: txt(s && s.nome).slice(0, 60),
-      adicional: txt(s && s.adicional),
+      precos: mapa(s && s.precos, PORTES),
       ativo: !(s && s.ativo === false)
     })),
-    base: mapa(m.base, PORTES),
     pelagem: mapa(m.pelagem, PELAGENS),
     faixas: m.faixas.slice(0, MAX_FAIXAS).map((f) => ({ limite: txt(f && f.limite), adicional: txt(f && f.adicional) })),
     manejo: txt(m.manejo),
@@ -66,11 +70,14 @@ function htmlServico(s, i, total) {
   const btn = (acao, rot, verbo, desab, perigo) =>
     '<button type="button" class="btn ' + (perigo ? 'btn-perigo ' : '') + 'btn-pequeno" data-acao="' + acao + '" data-i="' + i +
     '" aria-label="' + esc(verbo + ' serviço ' + nome) + '"' + (desab ? ' disabled' : '') + '>' + rot + '</button>';
+  const precos = PORTES.map((p) =>
+    num('bp-s-' + i + '-' + p.valor, 'Preço, porte ' + p.rotulo.toLowerCase() + ' (R$)', s.precos[p.valor])).join('');
   return '<li class="bp-item bp-srv" data-sid="' + esc(s.id) + '">' +
     '<div class="campo"><label for="bp-s-nome-' + i + '">Nome do serviço</label>' +
     '<input type="text" id="bp-s-nome-' + i + '" maxlength="60" autocomplete="off" value="' + esc(s.nome) + '" aria-describedby="e-bp-s-nome-' + i + '">' +
     '<p class="erro" id="e-bp-s-nome-' + i + '" role="alert" hidden></p></div>' +
-    num('bp-s-adic-' + i, 'Valor adicional (R$)', s.adicional, 'Deixe vazio se ainda não foi definido.') +
+    '<p class="ajuda">Preço deste serviço para cada tamanho de pet. Deixe vazio o tamanho em que ainda não definiu o preço.</p>' +
+    '<div class="bp-grade">' + precos + '</div>' +
     '<label class="bp-check"><input type="checkbox" id="bp-s-ativo-' + i + '"' + (s.ativo ? ' checked' : '') + '> <span>Disponível para os clientes</span></label>' +
     '<div class="acoes">' + btn('srv-subir', '↑ Subir', 'Subir', i === 0) + btn('srv-descer', '↓ Descer', 'Descer', i === total - 1) +
     btn('srv-rem', 'Remover', 'Remover', false, true) + '</div></li>';
@@ -85,16 +92,12 @@ function htmlFaixa(f, i) {
 }
 
 export function htmlForm(m) {
-  const servicos = secao('Serviços',
-    '<p class="ajuda">O valor adicional é somado ao preço base. Serviços desmarcados em "Disponível" não aparecem para os clientes. O identificador interno de cada serviço nunca muda, mesmo que você o renomeie.</p>' +
+  const servicos = secao('Serviços e preços por tamanho',
+    '<p class="ajuda">Cada serviço tem um preço para cada tamanho do pet. O valor aproximado mostrado ao cliente soma o preço de cada serviço escolhido, no tamanho do pet. Serviços desmarcados em "Disponível" não aparecem para os clientes. O identificador interno de cada serviço nunca muda, mesmo que você o renomeie.</p>' +
     '<ol class="bp-lista" id="bp-servicos">' + m.servicos.map((s, i) => htmlServico(s, i, m.servicos.length)).join('') + '</ol>' +
     '<p class="erro" id="e-bp-servicos" role="alert" hidden></p>' +
     '<div class="acoes"><button type="button" class="btn btn-pequeno" id="bp-srv-add" data-acao="srv-add"' +
     (m.servicos.length >= MAX_SERVICOS ? ' disabled' : '') + '>Adicionar serviço</button></div>');
-
-  const base = secao('Preço base por porte',
-    '<p class="ajuda">Se um porte ficar vazio, o site não mostra valor aproximado para ele e avisa que a equipe informará o valor. Use vírgula para os centavos.</p>' +
-    '<div class="bp-grade">' + PORTES.map((p) => num('bp-base-' + p.valor, 'Porte ' + p.rotulo.toLowerCase() + ' (R$)', m.base[p.valor])).join('') + '</div>');
 
   const pelagem = secao('Adicional por pelagem',
     '<p class="ajuda">Somado quando o pet tem essa pelagem. Vazio vale R$ 0,00.</p>' +
@@ -112,7 +115,7 @@ export function htmlForm(m) {
     num('bp-ant', 'Antecedência mínima (horas)', m.antecedencia, 'Horários que começam em menos tempo que isso não aparecem. De 0 a 720.', 'numeric') +
     num('bp-jan', 'Janela de agendamento (dias)', m.janela, 'Até quantos dias à frente os clientes podem escolher. De 1 a 180.', 'numeric') + '</div>');
 
-  return servicos + base + pelagem + faixas + regras;
+  return servicos + pelagem + faixas + regras;
 }
 
 // ---------------------------------------------------------------------
@@ -120,12 +123,13 @@ export function htmlForm(m) {
 // ---------------------------------------------------------------------
 export function lerForm(raiz) {
   const v = (id) => { const e = raiz.querySelector('#' + id); return e ? e.value : ''; };
-  const m = { servicos: [], base: {}, pelagem: {}, faixas: [], manejo: v('bp-manejo'), antecedencia: v('bp-ant'), janela: v('bp-jan') };
+  const m = { servicos: [], pelagem: {}, faixas: [], manejo: v('bp-manejo'), antecedencia: v('bp-ant'), janela: v('bp-jan') };
   raiz.querySelectorAll('li.bp-srv').forEach((li, i) => {
     const c = raiz.querySelector('#bp-s-ativo-' + i);
-    m.servicos.push({ id: li.dataset.sid || '', nome: v('bp-s-nome-' + i), adicional: v('bp-s-adic-' + i), ativo: !!(c && c.checked) });
+    const precos = {};
+    PORTES.forEach((p) => { precos[p.valor] = v('bp-s-' + i + '-' + p.valor); });
+    m.servicos.push({ id: li.dataset.sid || '', nome: v('bp-s-nome-' + i), precos, ativo: !!(c && c.checked) });
   });
-  PORTES.forEach((p) => { m.base[p.valor] = v('bp-base-' + p.valor); });
   PELAGENS.forEach((p) => { m.pelagem[p.valor] = v('bp-pel-' + p.valor); });
   raiz.querySelectorAll('li.bp-faixa').forEach((li, i) => {
     m.faixas.push({ limite: v('bp-f-lim-' + i), adicional: v('bp-f-adic-' + i) });
@@ -178,20 +182,19 @@ export function converter(m, gravar) {
   const servicos = m.servicos.map((s, i) => {
     const nome = s.nome.replace(/\s+/g, ' ').trim();
     if (!nome) erros.push({ id: 'bp-s-nome-' + i, msg: 'Informe o nome do serviço.' });
-    const adicional = dinheiro(s.adicional, 'bp-s-adic-' + i, erros);
+    const precos = {};
+    PORTES.forEach((p) => { precos[p.valor] = dinheiro(s.precos[p.valor], 'bp-s-' + i + '-' + p.valor, erros); });
     let id = s.id;
     if (!id) {
       id = gravar ? gerarId(nome, usados) : '~novo' + i;
       if (gravar) s.id = id;
     }
     usados.add(id);
-    return { id, nome, adicional, ativo: s.ativo };
+    return { id, nome, precos, ativo: s.ativo };
   });
   if (servicos.length < 1) erros.push({ id: 'bp-servicos', msg: 'Cadastre pelo menos um serviço.' });
   if (servicos.length > MAX_SERVICOS) erros.push({ id: 'bp-servicos', msg: 'Use no máximo ' + MAX_SERVICOS + ' serviços.' });
 
-  const preco_base_porte = {};
-  PORTES.forEach((p) => { preco_base_porte[p.valor] = dinheiro(m.base[p.valor], 'bp-base-' + p.valor, erros); });
   const pelagem_adicional = {};
   PELAGENS.forEach((p) => { pelagem_adicional[p.valor] = dinheiro(m.pelagem[p.valor], 'bp-pel-' + p.valor, erros); });
 
@@ -214,7 +217,7 @@ export function converter(m, gravar) {
   const janela_dias = inteiro(m.janela, 'bp-jan', 1, 180, 'Informe um número inteiro de dias, de 1 a 180.', erros);
 
   return {
-    cfg: { servicos, preco_base_porte, pelagem_adicional, peso_faixas: faixas, manejo_dificil, antecedencia_horas, janela_dias },
+    cfg: { servicos, pelagem_adicional, peso_faixas: faixas, manejo_dificil, antecedencia_horas, janela_dias },
     erros
   };
 }
@@ -242,4 +245,4 @@ export function mostrarErros(raiz, erros) {
     }
   }
   return primeiro;
-}
+    }
