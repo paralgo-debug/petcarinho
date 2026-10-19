@@ -1,4 +1,5 @@
 // PET NATUREZA - Banho & Tosa (painel) - aba Serviços e preços
+// Cada serviço tem um preço para cada porte.
 import { supabase } from './supabase.js';
 import { esc, toast, confirmar, setStatusPub, formatarDataHora } from './util.js';
 import { CONFIG_PADRAO } from './banho-calculo.js';
@@ -18,10 +19,14 @@ function garantirCss() {
   document.head.append(l);
 }
 
+// Conta os preços ainda não definidos dos serviços disponíveis (por porte)
 function contarVazios(cfg) {
-  const base = Object.values(cfg.preco_base_porte).filter((v) => v === null).length;
-  const srv = cfg.servicos.filter((s) => s.ativo && s.adicional === null).length;
-  return base + srv;
+  let n = 0;
+  cfg.servicos.forEach((s) => {
+    if (!s.ativo) return;
+    Object.values(s.precos).forEach((v) => { if (v === null) n += 1; });
+  });
+  return n;
 }
 
 export async function viewPrecos(alvo, ctx) {
@@ -182,7 +187,7 @@ export async function viewPrecos(alvo, ctx) {
     if (pre.erros.length > 0) return mostrarProblemas(pre.erros);
     const vazios = contarVazios(pre.cfg);
     const msg = 'Publicar serviços e preços? A nova versão passa a valer no site para os clientes.' +
-      (vazios > 0 ? ' Atenção: ' + vazios + ' preço(s) ainda não definido(s) (preço base ou valor de serviço disponível). Nesses casos o site dirá que o valor será informado pela equipe.' : '');
+      (vazios > 0 ? ' Atenção: ' + vazios + ' preço(s) de serviço ainda não definido(s) (serviços disponíveis, em algum tamanho). Nesses casos o site dirá que o valor será informado pela equipe.' : '');
     if (!(await confirmar(msg, 'Publicar'))) return;
 
     botao.disabled = true;
@@ -250,6 +255,9 @@ export async function viewPrecos(alvo, ctx) {
     if (f && !f.disabled) f.focus();
   }
 
+  // Um serviço novo começa com os 5 preços vazios
+  const precosVaziosTexto = () => ({ mini: '', pequeno: '', medio: '', grande: '', gigante: '' });
+
   // ---------- Eventos ----------
   raiz.addEventListener('click', async (ev) => {
     const b = ev.target.closest('button[data-acao]');
@@ -274,7 +282,7 @@ export async function viewPrecos(alvo, ctx) {
       $('bp-recup').innerHTML = '';
     } else if (acao === 'srv-add') {
       const n = lerForm($form).servicos.length;
-      mudar((m) => m.servicos.push({ id: '', nome: '', adicional: '', ativo: true }), '#bp-s-nome-' + n);
+      mudar((m) => m.servicos.push({ id: '', nome: '', precos: precosVaziosTexto(), ativo: true }), '#bp-s-nome-' + n);
     } else if (acao === 'srv-subir' || acao === 'srv-descer') {
       const j = acao === 'srv-subir' ? i - 1 : i + 1;
       const ultimo = lerForm($form).servicos.length - 1;
